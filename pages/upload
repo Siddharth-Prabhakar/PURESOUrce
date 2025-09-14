@@ -1,16 +1,19 @@
 import React, { useState, useCallback, useRef } from "react";
 import { GroundwaterSample } from "@/entities/GroundwaterSample";
-import { UploadFile, ExtractDataFromUploadedFile, InvokeLLM } from "@/integrations/Core";
+import { UploadFile, ExtractDataFromUploadedFile } from "@/integrations/Core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, ArrowLeft, FileSpreadsheet, Download, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { geminiService } from "@/services/geminiService";
+import { downloadTemplate } from "@/utils/templateGenerator";
 
 import FileUploadZone from "../components/upload/FileUploadZone";
 import DataValidationPanel from "../components/upload/DataValidationPanel";
 import DataPreview from "../components/upload/DataPreview";
+import AIValidationResults from "../components/upload/AIValidationResults";
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -23,6 +26,7 @@ export default function UploadPage() {
   const [currentStep, setCurrentStep] = useState("upload");
   const [retryCount, setRetryCount] = useState(0);
   const [uploadProgress, setUploadProgress] = useState("");
+  const [showAIResults, setShowAIResults] = useState(false);
 
   const uploadWithRetry = async (file, maxRetries = 3) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -157,55 +161,13 @@ export default function UploadPage() {
   const validateDataWithAI = async (data) => {
     try {
       setUploadProgress("Validating data quality with AI...");
-      const validationPrompt = `
-        Analyze this groundwater heavy metal data for scientific accuracy and completeness:
-        
-        ${JSON.stringify(data, null, 2)}
-        
-        Check for:
-        1. Reasonable metal concentration ranges (typical groundwater levels)
-        2. Complete location data (latitude/longitude validity)
-        3. Data consistency and outliers
-        4. Missing critical measurements
-        5. Potential data entry errors
-        
-        Provide a detailed assessment with quality score (0-100) and specific recommendations.
-      `;
-
-      const response = await InvokeLLM({
-        prompt: validationPrompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            quality_score: { type: "number" },
-            overall_assessment: { type: "string" },
-            issues_found: { 
-              type: "array",
-              items: { type: "string" }
-            },
-            recommendations: {
-              type: "array", 
-              items: { type: "string" }
-            },
-            corrected_data_suggestions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  location: { type: "string" },
-                  issue: { type: "string" },
-                  suggested_correction: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-
+      const response = await geminiService.validateGroundwaterData(data);
       setValidationResults(response);
+      setShowAIResults(true);
       setCurrentStep("preview");
     } catch (error) {
       console.error("AI validation failed:", error);
+      setShowAIResults(false);
       setCurrentStep("preview"); // Continue anyway
     } finally {
       setUploadProgress("");
@@ -265,20 +227,18 @@ export default function UploadPage() {
     setIsProcessing(false);
   };
 
-  const downloadTemplate = () => {
-    const templateData = `Location/Site Name,Latitude,Longitude,Pb (mg/L),As (mg/L),Cd (mg/L),Cr (mg/L),Hg (mg/L),Fe (mg/L),Mn (mg/L),Zn (mg/L),Cu (mg/L),Ni (mg/L),Sampling Date
-Delhi Industrial Zone,28.6139,77.2090,0.012,0.015,0.004,0.065,0.0012,0.35,0.12,3.2,2.1,0.025,2024-01-15
-Mumbai Coastal Area,19.0760,72.8777,0.008,0.006,0.002,0.032,0.0008,0.18,0.06,1.8,1.2,0.015,2024-01-16
-Chennai Mining District,13.0827,80.2707,0.025,0.032,0.008,0.095,0.0025,0.68,0.22,4.5,3.2,0.045,2024-01-17`;
+  const handleAcceptCorrections = () => {
+    // Apply AI corrections to the data
+    if (validationResults?.data_corrections) {
+      // Implementation for applying corrections
+      console.log("Applying AI corrections:", validationResults.data_corrections);
+    }
+    setShowAIResults(false);
+  };
 
-    const blob = new Blob([templateData], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'groundwater_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleRejectCorrections = () => {
+    // Keep original data
+    setShowAIResults(false);
   };
 
   const retryUpload = () => {
@@ -379,19 +339,30 @@ Chennai Mining District,13.0827,80.2707,0.025,0.032,0.008,0.095,0.0025,0.68,0.22
         )}
 
         {currentStep === "preview" && extractedData && (
-          <DataPreview
-            data={extractedData}
-            validationResults={validationResults}
-            onSave={processAndSaveData}
-            onCancel={() => {
-              setCurrentStep("upload");
-              setExtractedData(null);
-              setValidationResults(null);
-              setFiles([]);
-              setError(null);
-            }}
-            isProcessing={isProcessing}
-          />
+          <div className="space-y-6">
+            {showAIResults && validationResults && (
+              <AIValidationResults
+                validationResults={validationResults}
+                onAcceptCorrections={handleAcceptCorrections}
+                onRejectCorrections={handleRejectCorrections}
+              />
+            )}
+            
+            <DataPreview
+              data={extractedData}
+              validationResults={validationResults}
+              onSave={processAndSaveData}
+              onCancel={() => {
+                setCurrentStep("upload");
+                setExtractedData(null);
+                setValidationResults(null);
+                setFiles([]);
+                setError(null);
+                setShowAIResults(false);
+              }}
+              isProcessing={isProcessing}
+            />
+          </div>
         )}
       </div>
     </div>

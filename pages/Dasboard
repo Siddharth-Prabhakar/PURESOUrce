@@ -11,6 +11,7 @@ import StatsOverview from "../components/dashboard/StatsOverview";
 import RecentSamples from "../Uploads/RecentSamples";
 import RiskDistribution from "../components/dashboard/RiskDistribution";
 import MetalLevelsChart from "../components/dashboard/MetalLevelsChart";
+import AIInsights from "../components/dashboard/AIInsights";
 
 export default function Dashboard() {
   const [samples, setSamples] = useState([]);
@@ -120,8 +121,9 @@ export default function Dashboard() {
         </div>
 
         {/* Charts Section */}
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
           <MetalLevelsChart samples={samples} isLoading={isLoading} />
+          <AIInsights samples={samples} />
           <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
             <CardHeader>
               <CardTitle className="text-slate-900">Quick Actions</CardTitle>
