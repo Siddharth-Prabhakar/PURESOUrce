@@ -1,0 +1,154 @@
+import React, { useState, useEffect } from "react";
+import { GroundwaterSample } from "@/entities/GroundwaterSample";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Upload, TrendingUp, AlertTriangle, Shield, MapPin, BarChart3 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import StatsOverview from "../components/dashboard/StatsOverview";
+import RecentSamples from "../Uploads/RecentSamples";
+import RiskDistribution from "../components/dashboard/RiskDistribution";
+import MetalLevelsChart from "../components/dashboard/MetalLevelsChart";
+
+export default function Dashboard() {
+  const [samples, setSamples] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadSamples();
+  }, []);
+
+  const loadSamples = async () => {
+    setIsLoading(true);
+    try {
+      const data = await GroundwaterSample.list("-created_date", 100);
+      setSamples(data);
+    } catch (error) {
+      console.error("Error loading samples:", error);
+    }
+    setIsLoading(false);
+  };
+
+  const getStats = () => {
+    if (samples.length === 0) return { total: 0, safe: 0, moderate: 0, high: 0, avgHMPI: 0 };
+    
+    const safe = samples.filter(s => s.risk_classification === 'safe').length;
+    const moderate = samples.filter(s => s.risk_classification === 'moderate_risk').length;
+    const high = samples.filter(s => s.risk_classification === 'high_risk').length;
+    const avgHMPI = samples.reduce((sum, s) => sum + (s.hmpi_score || 0), 0) / samples.length;
+    
+    return { total: samples.length, safe, moderate, high, avgHMPI };
+  };
+
+  const stats = getStats();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-2">
+              Groundwater Analysis Dashboard
+            </h1>
+            <p className="text-slate-600 text-lg">
+              Monitor heavy metal contamination levels across sampling sites
+            </p>
+          </div>
+          <div className="flex gap-3 w-full lg:w-auto">
+            <Link to={createPageUrl("Upload")} className="flex-1 lg:flex-none">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
+                <Upload className="w-5 h-5 mr-2" />
+                Upload New Data
+              </Button>
+            </Link>
+            <Link to={createPageUrl("RiskMap")} className="flex-1 lg:flex-none">
+              <Button variant="outline" className="w-full border-slate-300">
+                <MapPin className="w-5 h-5 mr-2" />
+                View Risk Map
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatsOverview
+            title="Total Samples"
+            value={stats.total}
+            icon={BarChart3}
+            bgColor="bg-blue-600"
+            textColor="text-blue-600"
+            trend="+12% this month"
+          />
+          <StatsOverview
+            title="Safe Sites"
+            value={stats.safe}
+            icon={Shield}
+            bgColor="bg-green-600"
+            textColor="text-green-600"
+            percentage={stats.total > 0 ? ((stats.safe / stats.total) * 100).toFixed(1) : 0}
+          />
+          <StatsOverview
+            title="High Risk Sites"
+            value={stats.high}
+            icon={AlertTriangle}
+            bgColor="bg-red-600"
+            textColor="text-red-600"
+            percentage={stats.total > 0 ? ((stats.high / stats.total) * 100).toFixed(1) : 0}
+          />
+          <StatsOverview
+            title="Average HMPI"
+            value={stats.avgHMPI.toFixed(1)}
+            icon={TrendingUp}
+            bgColor="bg-purple-600"
+            textColor="text-purple-600"
+            trend={stats.avgHMPI > 100 ? "Above threshold" : "Within limits"}
+          />
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <RecentSamples samples={samples} isLoading={isLoading} />
+          </div>
+          <div>
+            <RiskDistribution samples={samples} isLoading={isLoading} />
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          <MetalLevelsChart samples={samples} isLoading={isLoading} />
+          <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+            <CardHeader>
+              <CardTitle className="text-slate-900">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Link to={createPageUrl("Upload")} className="block">
+                <Button variant="outline" className="w-full justify-start text-left">
+                  <Upload className="w-5 h-5 mr-3" />
+                  Upload Excel Data
+                </Button>
+              </Link>
+              <Link to={createPageUrl("DataManagement")} className="block">
+                <Button variant="outline" className="w-full justify-start text-left">
+                  <BarChart3 className="w-5 h-5 mr-3" />
+                  Export Analysis Report
+                </Button>
+              </Link>
+              <Link to={createPageUrl("RiskMap")} className="block">
+                <Button variant="outline" className="w-full justify-start text-left">
+                  <MapPin className="w-5 h-5 mr-3" />
+                  View Interactive Map
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

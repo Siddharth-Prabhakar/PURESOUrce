@@ -1,0 +1,143 @@
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle, XCircle, AlertTriangle, Save, X } from "lucide-react";
+
+export default function DataPreview({ data, validationResults, onSave, onCancel, isProcessing }) {
+  const [selectedSamples, setSelectedSamples] = useState([]);
+  const samples = Array.isArray(data) ? data : [data];
+
+  const getQualityColor = (score) => {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-amber-600"; 
+    return "text-red-600";
+  };
+
+  const getQualityIcon = (score) => {
+    if (score >= 80) return <CheckCircle className="w-4 h-4" />;
+    if (score >= 60) return <AlertTriangle className="w-4 h-4" />;
+    return <XCircle className="w-4 h-4" />;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Validation Results */}
+      {validationResults && (
+        <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className={getQualityColor(validationResults.quality_score)}>
+                {getQualityIcon(validationResults.quality_score)}
+              </div>
+              Data Quality Assessment
+              <Badge className={`ml-2 ${
+                validationResults.quality_score >= 80 ? 'bg-green-100 text-green-800' :
+                validationResults.quality_score >= 60 ? 'bg-amber-100 text-amber-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {validationResults.quality_score}/100
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-slate-700">{validationResults.overall_assessment}</p>
+            
+            {validationResults.issues_found?.length > 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Issues Found:</strong>
+                  <ul className="mt-2 space-y-1">
+                    {validationResults.issues_found.map((issue, index) => (
+                      <li key={index} className="text-sm">• {issue}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {validationResults.recommendations?.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-2">Recommendations:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  {validationResults.recommendations.map((rec, index) => (
+                    <li key={index}>• {rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Data Preview */}
+      <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+        <CardHeader>
+          <CardTitle>Data Preview ({samples.length} samples)</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="font-semibold">Location</TableHead>
+                  <TableHead className="font-semibold">Coordinates</TableHead>
+                  <TableHead className="font-semibold">Lead (mg/L)</TableHead>
+                  <TableHead className="font-semibold">Arsenic (mg/L)</TableHead>
+                  <TableHead className="font-semibold">Cadmium (mg/L)</TableHead>
+                  <TableHead className="font-semibold">Chromium (mg/L)</TableHead>
+                  <TableHead className="font-semibold">Mercury (mg/L)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {samples.slice(0, 10).map((sample, index) => (
+                  <TableRow key={index} className="hover:bg-slate-50">
+                    <TableCell className="font-medium">{sample.location_name}</TableCell>
+                    <TableCell className="text-sm text-slate-600">
+                      {sample.latitude?.toFixed(4)}, {sample.longitude?.toFixed(4)}
+                    </TableCell>
+                    <TableCell>{sample.pb_mg_l?.toFixed(4) || 'N/A'}</TableCell>
+                    <TableCell>{sample.as_mg_l?.toFixed(4) || 'N/A'}</TableCell>
+                    <TableCell>{sample.cd_mg_l?.toFixed(4) || 'N/A'}</TableCell>
+                    <TableCell>{sample.cr_mg_l?.toFixed(4) || 'N/A'}</TableCell>
+                    <TableCell>{sample.hg_mg_l?.toFixed(4) || 'N/A'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          
+          {samples.length > 10 && (
+            <div className="p-4 text-center text-slate-500 text-sm">
+              ... and {samples.length - 10} more samples
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-4">
+        <Button
+          variant="outline"
+          onClick={onCancel}
+          disabled={isProcessing}
+          className="flex items-center gap-2"
+        >
+          <X className="w-4 h-4" />
+          Cancel
+        </Button>
+        <Button
+          onClick={onSave}
+          disabled={isProcessing}
+          className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+        >
+          <Save className="w-4 h-4" />
+          {isProcessing ? "Saving..." : `Save ${samples.length} Samples`}
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,40 @@
+import React from 'react';
+import { Card, CardContent } from "@/components/ui/card";
+import { TrendingUp, TrendingDown } from "lucide-react";
+
+export default function StatsOverview({ title, value, icon: Icon, bgColor, textColor, trend, percentage }) {
+  return (
+    <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200 hover:shadow-xl transition-all duration-300">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className={`p-3 rounded-xl ${bgColor} bg-opacity-10`}>
+            <Icon className={`w-6 h-6 ${textColor}`} />
+          </div>
+          {trend && (
+            <div className="flex items-center text-sm text-slate-600">
+              {trend.includes("+") ? (
+                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+              )}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900">{value}</h3>
+            {percentage && (
+              <span className={`text-sm font-medium ${textColor}`}>
+                ({percentage}%)
+              </span>
+            )}
+          </div>
+          <p className="text-slate-600 text-sm font-medium mt-1">{title}</p>
+          {trend && (
+            <p className="text-xs text-slate-500 mt-2">{trend}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

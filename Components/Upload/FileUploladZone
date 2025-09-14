@@ -1,0 +1,65 @@
+import React, { useRef } from 'react';
+import { Button } from "@/components/ui/button";
+import { FileSpreadsheet, Upload, Loader2 } from "lucide-react";
+
+export default function FileUploadZone({ onFileSelect, dragActive, isProcessing }) {
+  const fileInputRef = useRef(null);
+
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  return (
+    <div className={`p-12 transition-all duration-300 ${dragActive ? "bg-blue-50" : "bg-slate-50/50"}`}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".xlsx,.xls,.csv"
+        onChange={onFileSelect}
+        className="hidden"
+      />
+      
+      <div className="max-w-md mx-auto text-center">
+        <div className={`w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center transition-all duration-300 ${
+          dragActive ? "bg-blue-100 scale-110" : "bg-blue-50"
+        }`}>
+          {isProcessing ? (
+            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="w-10 h-10 text-blue-600" />
+          )}
+        </div>
+
+        <h3 className="text-xl font-semibold text-slate-900 mb-3">
+          {isProcessing ? "Processing your file..." : "Upload Groundwater Data"}
+        </h3>
+        
+        <p className="text-slate-600 mb-6 leading-relaxed">
+          {isProcessing 
+            ? "Please wait while we analyze your data for accuracy and completeness."
+            : "Drag and drop your Excel files here, or click to browse. We support .xlsx, .xls, and .csv formats."
+          }
+        </p>
+
+        {!isProcessing && (
+          <Button
+            onClick={handleBrowseClick}
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+            size="lg"
+          >
+            <Upload className="w-5 h-5 mr-2" />
+            Select Files
+          </Button>
+        )}
+
+        {!isProcessing && (
+          <div className="mt-6 text-sm text-slate-500">
+            <p>Supported formats: Excel (.xlsx, .xls), CSV</p>
+            <p>Maximum file size: 10MB</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

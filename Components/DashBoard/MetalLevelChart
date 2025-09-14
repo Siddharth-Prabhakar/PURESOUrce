@@ -1,0 +1,109 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { FlaskConical } from "lucide-react";
+
+export default function MetalLevelsChart({ samples, isLoading }) {
+  const getAverageMetalLevels = () => {
+    if (samples.length === 0) return [];
+    
+    const metals = ['pb', 'as', 'cd', 'cr', 'hg', 'fe', 'mn', 'zn', 'cu', 'ni'];
+    const metalNames = {
+      pb: 'Lead', as: 'Arsenic', cd: 'Cadmium', cr: 'Chromium', hg: 'Mercury',
+      fe: 'Iron', mn: 'Manganese', zn: 'Zinc', cu: 'Copper', ni: 'Nickel'
+    };
+
+    const WHO_limits = {
+      pb: 0.01, as: 0.01, cd: 0.003, cr: 0.05, hg: 0.001,
+      fe: 0.3, mn: 0.1, zn: 3.0, cu: 2.0, ni: 0.02
+    };
+    
+    return metals.map(metal => {
+      const values = samples
+        .map(s => s[`${metal}_mg_l`])
+        .filter(v => v !== null && v !== undefined);
+      
+      if (values.length === 0) return null;
+      
+      const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+      const exceedsLimit = average > WHO_limits[metal];
+      
+      return {
+        name: metalNames[metal],
+        average: average,
+        limit: WHO_limits[metal],
+        exceedsLimit
+      };
+    }).filter(Boolean);
+  };
+
+  const data = getAverageMetalLevels();
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
+          <p className="font-medium text-slate-900">{label}</p>
+          <p className="text-blue-600">
+            Average: {data.average.toFixed(4)} mg/L
+          </p>
+          <p className="text-slate-600">
+            WHO Limit: {data.limit.toFixed(4)} mg/L
+          </p>
+          {data.exceedsLimit && (
+            <p className="text-red-600 font-medium">⚠ Exceeds limit</p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-slate-900">
+          <FlaskConical className="w-5 h-5 text-blue-600" />
+          Average Metal Concentrations
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="h-64 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : data.length > 0 ? (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis 
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                  label={{ value: 'Concentration (mg/L)', angle: -90, position: 'insideLeft' }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar 
+                  dataKey="average" 
+                  fill="#3b82f6"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-64 flex items-center justify-center text-slate-500">
+            No metal concentration data available
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

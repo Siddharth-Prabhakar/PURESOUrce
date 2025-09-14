@@ -1,0 +1,399 @@
+import React, { useState, useCallback, useRef } from "react";
+import { GroundwaterSample } from "@/entities/GroundwaterSample";
+import { UploadFile, ExtractDataFromUploadedFile, InvokeLLM } from "@/integrations/Core";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertCircle, ArrowLeft, FileSpreadsheet, Download, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+
+import FileUploadZone from "../components/upload/FileUploadZone";
+import DataValidationPanel from "../components/upload/DataValidationPanel";
+import DataPreview from "../components/upload/DataPreview";
+
+export default function UploadPage() {
+  const navigate = useNavigate();
+  const [files, setFiles] = useState([]);
+  const [extractedData, setExtractedData] = useState(null);
+  const [validationResults, setValidationResults] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentStep, setCurrentStep] = useState("upload");
+  const [retryCount, setRetryCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState("");
+
+  const uploadWithRetry = async (file, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        setUploadProgress(`Uploading... (Attempt ${attempt}/${maxRetries})`);
+        const result = await UploadFile({ file });
+        setUploadProgress("");
+        return result;
+      } catch (error) {
+        console.error(`Upload attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Upload failed after ${maxRetries} attempts. ${error.message.includes('timeout') ? 'The server is experiencing high load. Please try again later.' : error.message}`);
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        setRetryCount(attempt);
+      }
+    }
+  };
+
+  const extractDataWithRetry = async (file_url, maxRetries = 2) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        setUploadProgress(`Extracting data... (Attempt ${attempt}/${maxRetries})`);
+        const result = await ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: GroundwaterSample.schema()
+        });
+        setUploadProgress("");
+        return result;
+      } catch (error) {
+        console.error(`Data extraction attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Data extraction failed after ${maxRetries} attempts. Please check your file format and try again.`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+  };
+
+  const handleFiles = useCallback(async (fileList) => {
+    setFiles(fileList);
+    setError(null);
+    setRetryCount(0);
+    setIsProcessing(true);
+    setCurrentStep("validate");
+
+    try {
+      const file = fileList[0];
+      
+      // Validate file size (limit to 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("File size too large. Please keep files under 10MB.");
+      }
+
+      // Upload with retry logic
+      const { file_url } = await uploadWithRetry(file);
+
+      // Extract data with retry logic
+      const extractResult = await extractDataWithRetry(file_url);
+
+      if (extractResult.status === "success" && extractResult.output) {
+        setExtractedData(extractResult.output);
+        await validateDataWithAI(extractResult.output);
+      } else {
+        throw new Error(extractResult.details || "Failed to extract data from the file. Please check the file format.");
+      }
+    } catch (error) {
+      console.error("File processing error:", error);
+      setError(error.message);
+      setCurrentStep("upload");
+    } finally {
+      setIsProcessing(false);
+      setUploadProgress("");
+    }
+  }, []);
+
+  const handleDrag = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(
+      file => file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')
+    );
+
+    if (droppedFiles.length === 0) {
+      setError("Please upload Excel (.xlsx, .xls) or CSV files only");
+      return;
+    }
+
+    if (droppedFiles[0].size > 10 * 1024 * 1024) {
+      setError("File size too large. Please keep files under 10MB.");
+      return;
+    }
+
+    handleFiles(droppedFiles);
+  }, [handleFiles]);
+
+  const handleFileInput = useCallback((e) => {
+    const selectedFiles = Array.from(e.target.files).filter(
+      file => file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')
+    );
+
+    if (selectedFiles.length === 0) {
+      setError("Please upload Excel (.xlsx, .xls) or CSV files only");
+      return;
+    }
+
+    if (selectedFiles[0].size > 10 * 1024 * 1024) {
+      setError("File size too large. Please keep files under 10MB.");
+      return;
+    }
+
+    handleFiles(selectedFiles);
+  }, [handleFiles]);
+
+  const validateDataWithAI = async (data) => {
+    try {
+      setUploadProgress("Validating data quality with AI...");
+      const validationPrompt = `
+        Analyze this groundwater heavy metal data for scientific accuracy and completeness:
+        
+        ${JSON.stringify(data, null, 2)}
+        
+        Check for:
+        1. Reasonable metal concentration ranges (typical groundwater levels)
+        2. Complete location data (latitude/longitude validity)
+        3. Data consistency and outliers
+        4. Missing critical measurements
+        5. Potential data entry errors
+        
+        Provide a detailed assessment with quality score (0-100) and specific recommendations.
+      `;
+
+      const response = await InvokeLLM({
+        prompt: validationPrompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            quality_score: { type: "number" },
+            overall_assessment: { type: "string" },
+            issues_found: { 
+              type: "array",
+              items: { type: "string" }
+            },
+            recommendations: {
+              type: "array", 
+              items: { type: "string" }
+            },
+            corrected_data_suggestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  location: { type: "string" },
+                  issue: { type: "string" },
+                  suggested_correction: { type: "string" }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      setValidationResults(response);
+      setCurrentStep("preview");
+    } catch (error) {
+      console.error("AI validation failed:", error);
+      setCurrentStep("preview"); // Continue anyway
+    } finally {
+      setUploadProgress("");
+    }
+  };
+
+  const calculateHMPI = (sample) => {
+    const standards = {
+      pb: 0.01, as: 0.01, cd: 0.003, cr: 0.05, hg: 0.001,
+      fe: 0.3, mn: 0.1, zn: 3.0, cu: 2.0, ni: 0.02
+    };
+
+    let hmpi = 0;
+    let count = 0;
+
+    Object.keys(standards).forEach(metal => {
+      const concentration = sample[`${metal}_mg_l`];
+      if (concentration !== undefined && concentration !== null) {
+        const ratio = concentration / standards[metal];
+        hmpi += ratio;
+        count++;
+      }
+    });
+
+    return count > 0 ? (hmpi / count) * 100 : 0;
+  };
+
+  const processAndSaveData = async () => {
+    setIsProcessing(true);
+    try {
+      const processedData = Array.isArray(extractedData) ? extractedData : [extractedData];
+      
+      for (const sample of processedData) {
+        const hmpiScore = calculateHMPI(sample);
+        let riskClassification = 'safe';
+        
+        if (hmpiScore > 200) riskClassification = 'high_risk';
+        else if (hmpiScore > 100) riskClassification = 'moderate_risk';
+
+        const sampleData = {
+          ...sample,
+          hmpi_score: hmpiScore,
+          risk_classification: riskClassification,
+          data_quality_score: validationResults?.quality_score || 85,
+          validation_notes: validationResults?.overall_assessment || "Data processed successfully",
+          data_source: files[0]?.name || "uploaded_file",
+          sampling_date: sample.sampling_date || new Date().toISOString().split('T')[0]
+        };
+
+        await GroundwaterSample.create(sampleData);
+      }
+
+      navigate(createPageUrl("Dashboard"));
+    } catch (error) {
+      setError(`Error saving data: ${error.message}`);
+    }
+    setIsProcessing(false);
+  };
+
+  const downloadTemplate = () => {
+    const templateData = `Location/Site Name,Latitude,Longitude,Pb (mg/L),As (mg/L),Cd (mg/L),Cr (mg/L),Hg (mg/L),Fe (mg/L),Mn (mg/L),Zn (mg/L),Cu (mg/L),Ni (mg/L),Sampling Date
+Delhi Industrial Zone,28.6139,77.2090,0.012,0.015,0.004,0.065,0.0012,0.35,0.12,3.2,2.1,0.025,2024-01-15
+Mumbai Coastal Area,19.0760,72.8777,0.008,0.006,0.002,0.032,0.0008,0.18,0.06,1.8,1.2,0.015,2024-01-16
+Chennai Mining District,13.0827,80.2707,0.025,0.032,0.008,0.095,0.0025,0.68,0.22,4.5,3.2,0.045,2024-01-17`;
+
+    const blob = new Blob([templateData], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'groundwater_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const retryUpload = () => {
+    if (files.length > 0) {
+      handleFiles(files);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate(createPageUrl("Dashboard"))}
+              className="border-slate-300"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Upload Groundwater Data</h1>
+              <p className="text-slate-600 mt-1">Import Excel files for heavy metal analysis</p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={downloadTemplate}
+            className="border-slate-300"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Template
+          </Button>
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              {error.includes('timeout') || error.includes('failed after') ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={retryUpload}
+                  disabled={isProcessing}
+                  className="ml-4"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Retry
+                </Button>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {uploadProgress && (
+          <Alert className="mb-6 border-blue-200 bg-blue-50">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              {uploadProgress}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {currentStep === "upload" && (
+          <Card className="shadow-lg border-slate-200 bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-900">
+                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                Upload Groundwater Analysis Data
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <FileUploadZone
+                  onFileSelect={handleFileInput}
+                  dragActive={dragActive}
+                  isProcessing={isProcessing}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {currentStep === "validate" && (
+          <DataValidationPanel 
+            isProcessing={isProcessing}
+            fileName={files[0]?.name}
+            retryCount={retryCount}
+          />
+        )}
+
+        {currentStep === "preview" && extractedData && (
+          <DataPreview
+            data={extractedData}
+            validationResults={validationResults}
+            onSave={processAndSaveData}
+            onCancel={() => {
+              setCurrentStep("upload");
+              setExtractedData(null);
+              setValidationResults(null);
+              setFiles([]);
+              setError(null);
+            }}
+            isProcessing={isProcessing}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

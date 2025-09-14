@@ -1,0 +1,80 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CheckCircle, Loader2, Search, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+export default function DataValidationPanel({ isProcessing, fileName, retryCount }) {
+  const steps = [
+    { name: "File Upload", completed: true },
+    { name: "Data Extraction", completed: true },
+    { name: "AI Validation", completed: false },
+    { name: "Quality Assessment", completed: false }
+  ];
+
+  return (
+    <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-slate-900">
+          <Search className="w-5 h-5 text-blue-600" />
+          Validating Data Quality
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 bg-blue-50 rounded-full flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">
+            Analyzing: {fileName}
+          </h3>
+          <p className="text-slate-600">
+            Our AI system is checking your data for accuracy, completeness, and scientific validity.
+          </p>
+          {retryCount > 0 && (
+            <p className="text-amber-600 mt-2 text-sm">
+              Retry attempt {retryCount} - Server experiencing high load
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {steps.map((step, index) => (
+            <div key={step.name} className="flex items-center gap-3">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                step.completed ? 'bg-green-100' : 'bg-slate-100'
+              }`}>
+                {step.completed ? (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                ) : (
+                  <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                )}
+              </div>
+              <span className={step.completed ? 'text-slate-900 font-medium' : 'text-slate-500'}>
+                {step.name}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {retryCount > 0 && (
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              Upload is taking longer than usual due to server load. Please be patient.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-semibold text-blue-900 mb-2">What we're checking:</h4>
+          <ul className="text-sm text-blue-800 space-y-1">
+            <li>• Metal concentration ranges and scientific validity</li>
+            <li>• Coordinate accuracy and location data</li>
+            <li>• Data completeness and missing values</li>
+            <li>• Potential outliers and inconsistencies</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

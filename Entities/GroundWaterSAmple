@@ -1,0 +1,97 @@
+{
+  "name": "GroundwaterSample",
+  "type": "object",
+  "properties": {
+    "location_name": {
+      "type": "string",
+      "description": "Name of the sampling location/site"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "Latitude coordinate"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "Longitude coordinate"
+    },
+    "pb_mg_l": {
+      "type": "number",
+      "description": "Lead concentration in mg/L"
+    },
+    "as_mg_l": {
+      "type": "number",
+      "description": "Arsenic concentration in mg/L"
+    },
+    "cd_mg_l": {
+      "type": "number",
+      "description": "Cadmium concentration in mg/L"
+    },
+    "cr_mg_l": {
+      "type": "number",
+      "description": "Chromium concentration in mg/L"
+    },
+    "hg_mg_l": {
+      "type": "number",
+      "description": "Mercury concentration in mg/L"
+    },
+    "fe_mg_l": {
+      "type": "number",
+      "description": "Iron concentration in mg/L"
+    },
+    "mn_mg_l": {
+      "type": "number",
+      "description": "Manganese concentration in mg/L"
+    },
+    "zn_mg_l": {
+      "type": "number",
+      "description": "Zinc concentration in mg/L"
+    },
+    "cu_mg_l": {
+      "type": "number",
+      "description": "Copper concentration in mg/L"
+    },
+    "ni_mg_l": {
+      "type": "number",
+      "description": "Nickel concentration in mg/L"
+    },
+    "hmpi_score": {
+      "type": "number",
+      "description": "Calculated Heavy Metal Pollution Index score"
+    },
+    "risk_classification": {
+      "type": "string",
+      "enum": [
+        "safe",
+        "moderate_risk",
+        "high_risk"
+      ],
+      "description": "Risk classification based on HMPI score"
+    },
+    "sampling_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of sample collection"
+    },
+    "data_quality_score": {
+      "type": "number",
+      "description": "AI-assessed data quality score (0-100)"
+    },
+    "validation_notes": {
+      "type": "string",
+      "description": "AI validation notes and suggestions"
+    },
+    "contributed_by": {
+      "type": "string",
+      "description": "Email of contributor"
+    },
+    "data_source": {
+      "type": "string",
+      "description": "Source of the data (uploaded file name or manual entry)"
+    }
+  },
+  "required": [
+    "location_name",
+    "latitude",
+    "longitude"
+  ]
+}

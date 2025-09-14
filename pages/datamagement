@@ -1,0 +1,207 @@
+import React, { useState, useEffect } from "react";
+import { GroundwaterSample } from "@/entities/GroundwaterSample";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, MapPin, Filter, Layers } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+
+export default function RiskMapPage() {
+  const navigate = useNavigate();
+  const [samples, setSamples] = useState([]);
+  const [selectedRisk, setSelectedRisk] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [mapCenter, setMapCenter] = useState([20.5937, 78.9629]); // Center of India
+
+  useEffect(() => {
+    loadSamples();
+  }, []);
+
+  const loadSamples = async () => {
+    try {
+      const data = await GroundwaterSample.list("-created_date");
+      const validSamples = data.filter(s => s.latitude && s.longitude);
+      setSamples(validSamples);
+      if (validSamples.length > 0) {
+        setMapCenter([validSamples[0].latitude, validSamples[0].longitude]);
+      }
+    } catch (error) {
+      console.error("Error loading samples:", error);
+    }
+    setIsLoading(false);
+  };
+
+  const filteredSamples = selectedRisk === "all" 
+    ? samples 
+    : samples.filter(s => s.risk_classification === selectedRisk);
+
+  const getRiskOptions = (risk) => {
+    switch (risk) {
+      case 'safe': return { color: '#10B981', fillColor: '#10B981', fillOpacity: 0.7 };
+      case 'moderate_risk': return { color: '#F59E0B', fillColor: '#F59E0B', fillOpacity: 0.7 };
+      case 'high_risk': return { color: '#EF4444', fillColor: '#EF4444', fillOpacity: 0.7 };
+      default: return { color: '#6B7280', fillColor: '#6B7280', fillOpacity: 0.5 };
+    }
+  };
+
+  const riskStats = {
+    safe: samples.filter(s => s.risk_classification === 'safe').length,
+    moderate: samples.filter(s => s.risk_classification === 'moderate_risk').length,
+    high: samples.filter(s => s.risk_classification === 'high_risk').length
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="p-6 lg:p-8 max-w-full mx-auto">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate(createPageUrl("Dashboard"))}
+              className="border-slate-300"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Groundwater Risk Map</h1>
+              <p className="text-slate-600 mt-1">Geographical distribution of contamination risk</p>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={selectedRisk === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedRisk("all")}
+              className="border-slate-300"
+            >
+              All ({samples.length})
+            </Button>
+            <Button
+              variant={selectedRisk === "safe" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedRisk("safe")}
+              className="border-green-300 text-green-700 hover:bg-green-50"
+            >
+              Safe ({riskStats.safe})
+            </Button>
+            <Button
+              variant={selectedRisk === "moderate_risk" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedRisk("moderate_risk")}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            >
+              Moderate ({riskStats.moderate})
+            </Button>
+            <Button
+              variant={selectedRisk === "high_risk" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedRisk("high_risk")}
+              className="border-red-300 text-red-700 hover:bg-red-50"
+            >
+              High Risk ({riskStats.high})
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-4 gap-6">
+          <Card className="lg:col-span-3 bg-white/80 backdrop-blur-sm shadow-lg border-slate-200 h-[75vh]">
+            <CardContent className="p-0 h-full">
+              <MapContainer center={mapCenter} zoom={5} scrollWheelZoom={true} className="h-full w-full rounded-lg z-0">
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {filteredSamples.map(sample => (
+                  <CircleMarker
+                    key={sample.id}
+                    center={[sample.latitude, sample.longitude]}
+                    pathOptions={getRiskOptions(sample.risk_classification)}
+                    radius={8}
+                  >
+                    <Popup>
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-base text-slate-900">{sample.location_name}</h4>
+                        <div className="space-y-1">
+                          <div className="flex justify-between gap-4">
+                            <span className="font-medium text-slate-600">HMPI Score:</span>
+                            <span className="font-bold text-slate-800">{sample.hmpi_score?.toFixed(1)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-4">
+                            <span className="font-medium text-slate-600">Risk Level:</span>
+                            <Badge className={`${
+                              sample.risk_classification === 'safe' ? 'bg-green-100 text-green-800' :
+                              sample.risk_classification === 'moderate_risk' ? 'bg-amber-100 text-amber-800' :
+                              'bg-red-100 text-red-800'
+                            } border`}>
+                              {sample.risk_classification === 'safe' ? 'Safe' :
+                               sample.risk_classification === 'moderate_risk' ? 'Moderate' :
+                               'High Risk'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500 pt-2 border-t mt-2">
+                           {sample.latitude?.toFixed(4)}, {sample.longitude?.toFixed(4)}
+                        </div>
+                      </div>
+                    </Popup>
+                    <Tooltip>{sample.location_name}</Tooltip>
+                  </CircleMarker>
+                ))}
+              </MapContainer>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+             <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-blue-600" />
+                  Map Legend
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-green-500 rounded-full border-2 border-white shadow-md"></div>
+                  <div>
+                    <p className="font-medium text-slate-900">Safe</p>
+                    <p className="text-xs text-slate-600">HMPI ≤ 100</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-amber-500 rounded-full border-2 border-white shadow-md"></div>
+                  <div>
+                    <p className="font-medium text-slate-900">Moderate Risk</p>
+                    <p className="text-xs text-slate-600">HMPI 100-200</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-red-500 rounded-full border-2 border-white shadow-md"></div>
+                  <div>
+                    <p className="font-medium text-slate-900">High Risk</p>
+                    <p className="text-xs text-slate-600">HMPI &gt; 200</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/80 backdrop-blur-sm shadow-lg border-slate-200">
+                <CardContent className="text-center py-8">
+                  <MapPin className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p className="text-slate-600 font-medium">Map is now interactive!</p>
+                  <p className="text-sm text-slate-500 mt-2">
+                    Click on the colored circles to view detailed sample information.
+                  </p>
+                </CardContent>
+            </Card>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
